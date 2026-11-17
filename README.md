@@ -23,7 +23,7 @@ npm start
 
 ## Deploy free
 
-See **docs/ResuMail-Production-Guide.pdf** (also served at `/guide.pdf`). Short version for Vercel: push to GitHub, import the repo at vercel.com/new, keep the defaults, and click Deploy.
+See the full guide at **public/guide.pdf** (the "Guide" button on the site). Short version for Vercel: push to GitHub, import the repo at vercel.com/new, keep the defaults, and click Deploy.
 
 ## Project layout
 
