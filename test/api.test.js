@@ -10,6 +10,8 @@ process.env.ADMIN_KEY = 'test-admin-key-0123456789';
 process.env.UPI_ID = 'owner@okaxis';
 process.env.UPI_NAME = 'Test Owner';
 process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret';
+process.env.PROCESSING_FEE_PERCENT = '2';
+process.env.GST_PERCENT = '18';
 delete process.env.DATABASE_URL;
 delete process.env.SMTP_USER;
 
@@ -223,7 +225,7 @@ test('coupons: hashed storage, 100% activation, single use, brute-force lockout'
 
   const u = await newUser();
   const q = await u.post('/api/billing/quote', { coupon: code.toLowerCase().replace(/(.{4})/g, '$1-') });
-  assert.equal(q.data.quote.amount, 0);
+  assert.deepEqual([q.data.quote.totalPaise, q.data.quote.feePaise, q.data.quote.gstPaise], [0, 0, 0], '100% coupon: nothing to pay');
   const act = await u.post('/api/billing/checkout', { coupon: code, plan: 'premium' });
   assert.equal(act.data.activated, true);
   assert.equal(act.data.user.usage.plan, 'premium');
@@ -231,7 +233,9 @@ test('coupons: hashed storage, 100% activation, single use, brute-force lockout'
 
   const v = await newUser();
   const hq = await v.post('/api/billing/quote', { coupon: half });
-  assert.deepEqual([hq.data.quote.plan, hq.data.quote.amount, hq.data.quote.discount], ['standard', 50, 49]);
+  // ₹99 − 50% = ₹50; fee 2% = ₹1.00; GST 18% of ₹51.00 = ₹9.18; total ₹60.18
+  const h = hq.data.quote;
+  assert.deepEqual([h.plan, h.subtotalPaise, h.discountPaise, h.feePaise, h.gstPaise, h.totalPaise], ['standard', 5000, 4900, 100, 918, 6018]);
 
   const w = await newUser();
   for (let i = 0; i < 4; i++) assert.equal((await w.post('/api/billing/quote', { coupon: `WRONGCODE${i}XYZ` })).data.code, 'COUPON_INVALID');
@@ -248,7 +252,11 @@ test('UPI: order, UTR checks, admin approval adds the pack', async () => {
   const u = await newUser();
   const co = await u.post('/api/billing/checkout', { plan: 'trial', method: 'upi' });
   assert.equal(co.status, 200);
-  assert.match(co.data.upi.uri, /^upi:\/\/pay\?pa=owner%40okaxis&pn=Test%20Owner&am=29\.00&cu=INR&tn=ResuMail%20RM/);
+  // Trial ₹29 + 2% fee (₹0.58) + 18% GST on ₹29.58 (₹5.32) = ₹34.90, and the QR link asks for exactly that.
+  assert.equal(co.data.upi.amountPaise, 3490);
+  assert.match(co.data.upi.uri, /^upi:\/\/pay\?pa=owner%40okaxis&pn=Test%20Owner&am=34\.90&cu=INR&tn=ResuMail%20RM/);
+  const [stored] = await db.query('SELECT amount, fee_paise, gst_paise, total_paise FROM orders WHERE id = $1', [co.data.orderId]);
+  assert.deepEqual(stored, { amount: 29, fee_paise: 58, gst_paise: 532, total_paise: 3490 }, 'breakdown saved on the order');
   const again = await u.post('/api/billing/checkout', { plan: 'trial', method: 'upi' });
   assert.equal(again.data.orderId, co.data.orderId, 'identical unpaid order is reused');
   assert.equal((await u.post('/api/billing/upi', { orderId: co.data.orderId, utr: '12345' })).status, 400);
@@ -271,6 +279,20 @@ test('UPI: order, UTR checks, admin approval adds the pack', async () => {
   const s = await u.post('/api/send', mail('hr@co.com', 'paid@gmail.com'));
   assert.equal(s.data.usage.remaining, 99);
   assert.equal((await u.post('/api/send', mail('hr2@co.com', 'paid@gmail.com'))).data.retryAfter <= 10, true);
+});
+
+test('price breakdown: plan + 2% processing fee + 18% GST on every plan', async () => {
+  const u = await newUser();
+  const expected = { trial: [2900, 58, 532, 3490], standard: [9900, 198, 1818, 11916], premium: [29900, 598, 5490, 35988] };
+  for (const [plan, [sub, fee, gst, total]] of Object.entries(expected)) {
+    const { quote } = (await u.post('/api/billing/quote', { plan })).data;
+    assert.deepEqual([quote.subtotalPaise, quote.feePaise, quote.gstPaise, quote.totalPaise], [sub, fee, gst, total], plan);
+    assert.equal(quote.subtotalPaise + quote.feePaise + quote.gstPaise, quote.totalPaise);
+  }
+  const boot = await u.get('/api/bootstrap');
+  assert.deepEqual(boot.data.pricing, { feePercent: 2, gstPercent: 18 });
+  const { breakdown } = billing._internal;
+  assert.equal(breakdown(99, 100).totalPaise, 0, 'free coupons add no fee or GST');
 });
 
 test('SSRF: custom SMTP hosts on private networks are refused', async () => {

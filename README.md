@@ -11,7 +11,9 @@ Upload your resume, get a polished introduction written from it (rule-based, **n
 | Standard (recommended) | ₹99 once | 1,000 pack | 5 s | All | ✓ |
 | Premium | ₹299 lifetime | Unlimited | 2 s | All | ✓ |
 
-Quotas, gaps and templates are enforced on the server. Packs never expire. Coupons (any % off, stored only as hashes) are created in the admin panel.
+Quotas, gaps and templates are enforced on the server. Packs never expire. Coupons (any % off, stored only as hashes) are created in the admin panel and applied at checkout.
+
+At checkout the buyer sees: plan price − coupon + processing fee (`PROCESSING_FEE_PERCENT`, default 2%) + GST on price and fee (`GST_PERCENT`, default 18%) = total. The UPI QR / Razorpay charge is for that total, e.g. Standard = ₹99 + ₹1.98 + ₹18.18 = **₹119.16**.
 
 ## Features
 
@@ -29,7 +31,7 @@ Requires Node.js 20 or newer. No database setup needed: without `DATABASE_URL` t
 ```bash
 npm install
 npm start          # http://localhost:3000
-npm test           # 15 API tests (auth, quotas, races, coupons, payments, security)
+npm test           # 17 API tests (auth, quotas, races, coupons, payments, security)
 npm run loadtest   # 300 concurrent visitors against http://localhost:3000
 ```
 
@@ -37,7 +39,7 @@ Copy `.env.example` to `.env` to try payments and the admin panel locally.
 
 ## Deploy
 
-Vercel + Neon Postgres (both free tiers). Set `DATABASE_URL`, `ADMIN_EMAILS`, `ADMIN_KEY`, `UPI_ID`, `UPI_NAME` and optionally `SMTP_USER`/`SMTP_PASS`, `SUPPORT_EMAIL`, `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`. The build step (`node scripts/build.js`) writes the SEO tags, sitemap and cache-busted assets to `dist/`.
+Vercel + Neon Postgres (both free tiers). Set `DATABASE_URL`, `ADMIN_EMAILS`, `ADMIN_KEY`, `UPI_ID`, `UPI_NAME` and optionally `PROCESSING_FEE_PERCENT`, `GST_PERCENT`, `SMTP_USER`/`SMTP_PASS`, `SUPPORT_EMAIL`, `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`. The build step (`node scripts/build.js`) writes the SEO tags, sitemap and cache-busted assets to `dist/`.
 
 ## Project layout
 

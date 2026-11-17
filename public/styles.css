@@ -733,3 +733,7 @@ details.pf-sec[open] summary { margin-bottom: 10px; }
 .set-plan input { width: 90px; }
 .admin .table td { white-space: normal; }
 @media (max-width: 900px) { .coupon-admin { grid-template-columns: 1fr 1fr; } }
+
+/* price breakdown */
+.summary .sub dt, .summary .sub dd { color: var(--muted); font-weight: 500; }
+.upi-incl { margin-top: -6px; }

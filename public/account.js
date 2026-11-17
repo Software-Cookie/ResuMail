@@ -11,6 +11,7 @@
     del(k) { try { localStorage.removeItem(`rm.${k}`); } catch (_) { /* ignore */ } },
   };
   const rupees = (n) => `₹${Number(n).toLocaleString('en-IN')}`;
+  const money = (paise) => `₹${(Number(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtDate = (d) => { try { return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (_) { return ''; } };
 
   function toast(msg, type = '', ms = 4200) {
@@ -90,7 +91,10 @@
   const A = {
     user: null,
     known: false,
-    config: { plans: FALLBACK_PLANS, gapChoices: [2, 3, 5, 10, 15, 20, 30, 45, 60, 90], templates: [], payments: { upi: false, razorpay: false } },
+    config: {
+      plans: FALLBACK_PLANS, gapChoices: [2, 3, 5, 10, 15, 20, 30, 45, 60, 90], templates: [],
+      payments: { upi: false, razorpay: false }, pricing: { feePercent: 2, gstPercent: 18 },
+    },
   };
   const listeners = [];
   const emit = () => listeners.forEach((fn) => { try { fn(A.user); } catch (e) { console.error(e); } });
@@ -354,7 +358,8 @@
     list.innerHTML = ordersCache.map((o) => {
       const [label, cls] = STATUS[o.status] || [o.status, 'muted'];
       const how = o.method === 'coupon' ? 'Coupon' : o.method === 'upi' ? 'UPI' : 'Card / Netbanking';
-      return `<li><div><b>${esc(NAMES[o.plan])}</b> · ${o.amount ? rupees(o.amount) : 'Free'}<small>${esc(fmtDate(o.created_at))} · ${how} · ${esc(o.id)}${o.note && o.status === 'rejected' ? ` · ${esc(o.note)}` : ''}</small></div>
+      const paid = o.total_paise ? money(o.total_paise) : o.amount ? rupees(o.amount) : 'Free';
+      return `<li><div><b>${esc(NAMES[o.plan])}</b> · ${paid}<small>${esc(fmtDate(o.created_at))} · ${how} · ${esc(o.id)}${o.note && o.status === 'rejected' ? ` · ${esc(o.note)}` : ''}</small></div>
         <span class="ost ost-${cls}">${esc(label)}</span>${o.status === 'created' && o.method === 'upi' ? `<button type="button" class="link-btn" data-resume="${esc(o.id)}">Finish</button>` : ''}</li>`;
     }).join('');
   }
@@ -405,30 +410,6 @@
     } catch (err) { msg.className = 'inline-msg small err'; msg.textContent = err.message; } finally { setLoading(btn, false); }
   });
 
-  /** Applies a coupon from the profile. 100% coupons activate straight away. */
-  $('#pfCouponForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const code = $('#pfCoupon').value.trim();
-    const msg = $('#pfCouponMsg'); const btn = $('button', e.currentTarget);
-    msg.className = 'inline-msg small';
-    if (!code) { msg.textContent = 'Enter a coupon code.'; return; }
-    setLoading(btn, true);
-    try {
-      const { quote } = await api('api/billing/quote', { coupon: code });
-      if (quote.amount === 0) {
-        if (!confirm(`This coupon unlocks the ${NAMES[quote.plan]} plan for free. Activate it now?`)) return;
-        const d = await api('api/billing/checkout', { coupon: code, plan: quote.plan });
-        $('#pfCoupon').value = '';
-        setUser(d.user); loadOrders();
-        msg.className = 'inline-msg small ok'; msg.textContent = `${NAMES[quote.plan]} plan activated.`;
-        toast(`${NAMES[quote.plan]} plan activated. Enjoy!`, 'ok');
-      } else {
-        profileDlg.close();
-        openPay({ plan: quote.plan, coupon: code });
-      }
-    } catch (err) { msg.className = 'inline-msg small err'; msg.textContent = err.message; } finally { setLoading(btn, false); }
-  });
-
   /* ---------------- checkout ---------------- */
   const payDlg = $('#payDlg');
   const pay = { plan: 'standard', coupon: '', quote: null, method: 'upi', order: null };
@@ -449,13 +430,30 @@
         <b>${rupees(p.price)}</b><small>${what} · ${p.minGap}s gap</small>${cur === p.id ? '<em class="cur">Current</em>' : ''}</button>`;
     }).join('');
   }
+  /** Same maths as the server (lib/billing.js); the server's figures are always the ones charged. */
+  function localQuote(planId) {
+    const p = planById(planId);
+    const { feePercent, gstPercent } = A.config.pricing;
+    const sub = p.price * 100;
+    const fee = Math.round((sub * feePercent) / 100);
+    const gst = Math.round(((sub + fee) * gstPercent) / 100);
+    return { plan: planId, listPaise: sub, discountPaise: 0, subtotalPaise: sub, feePaise: fee, gstPaise: gst, totalPaise: sub + fee + gst, feePercent, gstPercent, coupon: null };
+  }
+  const currentQuote = () => (pay.quote && pay.quote.plan === pay.plan ? pay.quote : localQuote(pay.plan));
+
   function renderSummary() {
     const p = planById(pay.plan);
-    const q = pay.quote && pay.quote.plan === pay.plan ? pay.quote : null;
-    const total = q ? q.amount : p.price;
-    $('#paySummary').innerHTML = `<div><dt>${esc(p.name)} plan</dt><dd>${rupees(p.price)}</dd></div>`
-      + (q && q.discount ? `<div class="disc"><dt>Coupon (${q.coupon.percentOff}% off)</dt><dd>−${rupees(q.discount)}</dd></div>` : '')
-      + `<div class="total"><dt>Total</dt><dd>${total ? rupees(total) : 'Free'}</dd></div>`;
+    const q = currentQuote();
+    const total = q.totalPaise;
+    const rows = [`<div><dt>${esc(p.name)} plan</dt><dd>${money(q.listPaise)}</dd></div>`];
+    if (q.discountPaise) {
+      rows.push(`<div class="disc"><dt>Coupon (${q.coupon.percentOff}% off)</dt><dd>−${money(q.discountPaise)}</dd></div>`);
+      rows.push(`<div class="sub"><dt>Price after coupon</dt><dd>${money(q.subtotalPaise)}</dd></div>`);
+    }
+    if (q.feePercent) rows.push(`<div><dt>Processing fee (${q.feePercent}%)</dt><dd>+${money(q.feePaise)}</dd></div>`);
+    if (q.gstPercent) rows.push(`<div><dt>GST (${q.gstPercent}%)</dt><dd>+${money(q.gstPaise)}</dd></div>`);
+    rows.push(`<div class="total"><dt>Total payable</dt><dd>${total ? money(total) : 'Free'}</dd></div>`);
+    $('#paySummary').innerHTML = rows.join('');
     const m = A.config.payments;
     $('#payMethods').hidden = !(m.upi && m.razorpay) || total === 0;
     $$('#payMethods .seg-btn').forEach((b) => b.classList.toggle('is-on', b.dataset.m === pay.method));
@@ -463,7 +461,7 @@
     if (total === 0) { go.textContent = `Activate ${p.name} for free`; go.disabled = false; $('#payMsg').textContent = ''; } else if (!m.upi && !m.razorpay) {
       go.textContent = 'Payments coming soon'; go.disabled = true;
       $('#payMsg').textContent = 'Online payment is not switched on yet. If you have a coupon, apply it above.';
-    } else { go.textContent = `Continue to pay ${rupees(total)}`; go.disabled = false; $('#payMsg').textContent = ''; }
+    } else { go.textContent = `Continue to pay ${money(total)}`; go.disabled = false; $('#payMsg').textContent = ''; }
   }
   async function openPay({ plan, coupon = '', autoContinue = false } = {}) {
     if (!(await ensureSignedIn('Create a free account or sign in to upgrade.'))) return;
@@ -498,7 +496,7 @@
       const { quote } = await api('api/billing/quote', { coupon: code, plan: pay.plan });
       pay.coupon = code; pay.quote = quote; pay.plan = quote.plan;
       msg.className = 'inline-msg small ok';
-      msg.textContent = quote.amount === 0 ? `Coupon applied: ${NAMES[quote.plan]} is free for you.` : `Coupon applied: ${quote.coupon.percentOff}% off ${NAMES[quote.plan]}.`;
+      msg.textContent = quote.totalPaise === 0 ? `Coupon applied: ${NAMES[quote.plan]} is free for you.` : `Coupon applied: ${quote.coupon.percentOff}% off ${NAMES[quote.plan]}.`;
       renderPlanOpts(); renderSummary();
     } catch (err) {
       pay.coupon = ''; pay.quote = null;
@@ -533,7 +531,10 @@
   });
 
   async function showUpi(d) {
-    $('#upiAmt').textContent = d.upi.amount.toLocaleString('en-IN');
+    const q = d.quote;
+    $('#upiAmt').textContent = (d.upi.amountPaise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    $('#upiIncl').textContent = [`${q.discountPaise ? 'Plan after coupon' : 'Plan'} ${money(q.subtotalPaise)}`,
+      q.feePercent ? `fee ${money(q.feePaise)}` : '', q.gstPercent ? `GST ${money(q.gstPaise)}` : ''].filter(Boolean).join(' + ');
     $('#upiName').textContent = d.upi.name;
     $('#upiVpa').textContent = d.upi.vpa;
     $('#upiOrder').textContent = d.orderId;
@@ -611,10 +612,20 @@
   }));
 
   /* ---------------- boot ---------------- */
+  function renderFeeNote() {
+    const el = $('#feeNote');
+    if (!el) return;
+    const { feePercent, gstPercent } = A.config.pricing || {};
+    const parts = [feePercent ? `a ${feePercent}% processing fee` : '', gstPercent ? `${gstPercent}% GST` : ''].filter(Boolean);
+    const text = parts.length ? `${parts.join(' and ')} ${parts.length > 1 ? 'are' : 'is'} added at checkout.` : '';
+    el.textContent = text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
   render();
   const ready = api('api/bootstrap', null, { timeout: 15000 }).then((cfg) => {
     A.config = Object.assign(A.config, cfg);
     A.known = true;
+    renderFeeNote();
     setUser(cfg.user);
     return cfg;
   }).catch((e) => {

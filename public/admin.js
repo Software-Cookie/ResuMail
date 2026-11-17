@@ -5,6 +5,8 @@
   const $$ = (s) => Array.from(document.querySelectorAll(s));
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const NAMES = { free: 'Free', trial: 'Trial', standard: 'Standard', premium: 'Premium' };
+  const money = (paise) => `₹${(Number(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const totalOf = (o) => (o.total_paise ? o.total_paise : o.amount * 100);
   const when = (d) => (d ? new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-');
   let key = '';
   try { key = sessionStorage.getItem('rm.adminKey') || ''; } catch (_) { /* ignore */ }
@@ -57,7 +59,7 @@
   function renderStats(d) {
     const s = [
       ['Users', d.users.users], ['Premium', d.users.premium], ['Standard', d.users.standard], ['Trial', d.users.trial],
-      ['To verify', d.orders.pending], ['Revenue', `₹${Number(d.orders.revenue).toLocaleString('en-IN')}`], ['Emails sent', Number(d.users.sent).toLocaleString('en-IN')],
+      ['To verify', d.orders.pending], ['Collected', money(d.orders.collected_paise)], ['Emails sent', Number(d.users.sent).toLocaleString('en-IN')],
     ];
     $('#stats').innerHTML = s.map(([k, v]) => `<div class="stat"><small>${esc(k)}</small><b>${esc(v)}</b></div>`).join('');
   }
@@ -79,7 +81,7 @@
         <td><code>${esc(o.id)}</code></td>
         <td title="${esc(o.name)}">${esc(o.email)}</td>
         <td>${esc(NAMES[o.plan])}</td>
-        <td><b>₹${esc(o.amount)}</b>${o.amount !== o.list_amount ? ` <small class="muted">(of ₹${esc(o.list_amount)})</small>` : ''}</td>
+        <td><b>${esc(money(totalOf(o)))}</b><br><small class="muted">₹${esc(o.amount)}${o.amount !== o.list_amount ? ` (of ₹${esc(o.list_amount)})` : ''} + fee ${esc(money(o.fee_paise))} + GST ${esc(money(o.gst_paise))}</small></td>
         <td>${o.utr ? `<code>${esc(o.utr)}</code>` : esc(o.method)}</td>
         <td>${esc(when(o.created_at))}</td>
         <td>${esc(o.status)}${o.note ? `<br><small class="muted">${esc(o.note)}</small>` : ''}</td>
@@ -95,7 +97,7 @@
     const o = orders.find((x) => x.id === id);
     try {
       if (a) {
-        if (!confirm(`Approve ${o.id}?\n\n₹${o.amount} for ${NAMES[o.plan]} from ${o.email}\nUTR: ${o.utr || '(none)'}\n\nOnly approve after you see this payment in your bank app.`)) return;
+        if (!confirm(`Approve ${o.id}?\n\n${money(totalOf(o))} (incl. fee + GST) for ${NAMES[o.plan]} from ${o.email}\nUTR: ${o.utr || '(none)'}\n\nOnly approve after you see this payment in your bank app.`)) return;
         await api('orders/approve', { id });
         toast(`${o.email} is now on ${NAMES[o.plan]}.`, 'ok');
       } else {

@@ -71,7 +71,7 @@
           { "@type": "Question", "name": "Do I have to share my Gmail password?", "acceptedAnswer": { "@type": "Answer", "text": "No. You create a Google App Password, which only lets ResuMail send email through Gmail. It is used to send and is never stored on our server." } },
           { "@type": "Question", "name": "Does ResuMail use AI?", "acceptedAnswer": { "@type": "Answer", "text": "No. Your resume is analysed with transparent rules inside your browser. It only leaves your device as the attachment on the emails you send." } },
           { "@type": "Question", "name": "How many emails can I send in a day?", "acceptedAnswer": { "@type": "Answer", "text": "Gmail allows about 500 emails a day. We recommend 50 to 100 a day. Your plan sets the minimum gap between emails: 30 seconds on Free, 10 on Trial, 5 on Standard and 2 on Premium." } },
-          { "@type": "Question", "name": "How do I pay for a plan?", "acceptedAnswer": { "@type": "Answer", "text": "Pay once with any UPI app such as Google Pay, PhonePe or Paytm, then enter the 12-digit UPI transaction ID. Your plan is activated after the payment is verified, usually within a few hours. There is no subscription." } },
+          { "@type": "Question", "name": "How do I pay for a plan?", "acceptedAnswer": { "@type": "Answer", "text": "Pay once with any UPI app such as Google Pay, PhonePe or Paytm. Checkout shows the plan price, any coupon discount, a small processing fee and GST, and the QR code is for that total. After paying, enter the 12-digit UPI transaction ID. Your plan is activated after the payment is verified, usually within a few hours. There is no subscription." } },
           { "@type": "Question", "name": "Do email packs expire?", "acceptedAnswer": { "@type": "Answer", "text": "No. Trial and Standard emails stay in your account until you use them. Premium is a one-time payment for lifetime, unlimited sending." } },
           { "@type": "Question", "name": "Will recruiters see the other people I emailed?", "acceptedAnswer": { "@type": "Answer", "text": "No. Every recruiter receives a separate email addressed only to them, greeting them by name and mentioning their company." } }
         ]
@@ -681,7 +681,7 @@
           <button class="btn btn-secondary btn-block" type="button" data-plan="premium">Get Premium</button>
         </article>
       </div>
-      <p class="fine center plans-note">Prices in Indian Rupees. Pay with any UPI app. Have a coupon? Apply it at checkout or in your profile.</p>
+      <p class="fine center plans-note">Prices in Indian Rupees. <span id="feeNote">A processing fee and GST are added at checkout and shown before you pay.</span> Pay with any UPI app. Have a coupon? Apply it at checkout.</p>
     </div>
   </section>
 
@@ -697,7 +697,7 @@
         <details><summary>Do I have to share my Gmail password?</summary><p>No. You create a Google App Password, which only lets ResuMail send email through Gmail. It is used to send and is never stored on our server.</p></details>
         <details><summary>Does ResuMail use AI?</summary><p>No. Your resume is analysed with transparent rules inside your browser. It only leaves your device as the attachment on the emails you send.</p></details>
         <details><summary>How many emails can I send in a day?</summary><p>Gmail allows about 500 emails a day. We recommend 50 to 100 a day. Your plan sets the minimum gap between emails: 30 seconds on Free, 10 on Trial, 5 on Standard and 2 on Premium.</p></details>
-        <details><summary>How do I pay for a plan?</summary><p>Pay once with any UPI app such as Google Pay, PhonePe or Paytm, then enter the 12-digit UPI transaction ID. Your plan is activated after the payment is verified, usually within a few hours. There is no subscription.</p></details>
+        <details><summary>How do I pay for a plan?</summary><p>Pay once with any UPI app such as Google Pay, PhonePe or Paytm. Checkout shows the plan price, any coupon discount, a small processing fee and GST, and the QR code is for that total. After paying, enter the 12-digit UPI transaction ID. Your plan is activated after the payment is verified, usually within a few hours. There is no subscription.</p></details>
         <details><summary>Do email packs expire?</summary><p>No. Trial and Standard emails stay in your account until you use them. Premium is a one-time payment for lifetime, unlimited sending.</p></details>
         <details><summary>Will recruiters see the other people I emailed?</summary><p>No. Every recruiter receives a separate email addressed only to them, greeting them by name and mentioning their company.</p></details>
       </div>
@@ -791,14 +791,6 @@
       <button class="btn btn-primary btn-block" type="button" id="pfUpgrade">Upgrade plan</button>
     </section>
     <section class="pf-sec">
-      <h4>Coupon code</h4>
-      <form class="coupon-row" id="pfCouponForm" novalidate>
-        <input id="pfCoupon" type="text" maxlength="40" placeholder="Enter your 16-character code" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Coupon code">
-        <button class="btn btn-secondary btn-sm" type="submit">Apply</button>
-      </form>
-      <p class="inline-msg small" id="pfCouponMsg" role="status"></p>
-    </section>
-    <section class="pf-sec">
       <h4>Payments</h4>
       <ul class="orders" id="pfOrders"><li class="muted small">No payments yet.</li></ul>
     </section>
@@ -844,6 +836,7 @@
         <div class="qr" id="upiQr" role="img" aria-label="UPI payment QR code"></div>
         <div class="upi-info">
           <div class="upi-amt">₹<b id="upiAmt">0</b></div>
+          <p class="muted small upi-incl" id="upiIncl"></p>
           <p>Pay to <b id="upiName"></b></p>
           <div class="copy-row"><code id="upiVpa"></code><button class="btn btn-ghost btn-sm" type="button" id="upiCopy">Copy</button></div>
           <a class="btn btn-primary btn-block" id="upiOpen" href="#" hidden>Open UPI app</a>
