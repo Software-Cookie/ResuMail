@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="ResuMail logo">
+  <defs>
+    <linearGradient id="rmg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="url(#rmg)"/>
+  <g fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 35V14h7a5.5 5.5 0 0 1 0 11h-7"/>
+    <path d="M16.5 25l6 10"/>
+    <path d="M26 35V14l6 9 6-9v21"/>
+  </g>
+  <circle cx="41" cy="7.5" r="3.6" fill="#F59E0B" stroke="#fff" stroke-width="1.6"/>
+</svg>
