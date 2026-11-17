@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Admin · ResuMail</title>
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script>try{var t=localStorage.getItem('rm.theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+</head>
+<body>
+  <header class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="./"><img src="logo.svg" alt="" width="34" height="34"><span>Resu<b>Mail</b></span></a>
+      <span class="badge">Admin</span>
+      <span class="spacer-auto"></span>
+      <a class="btn btn-ghost btn-sm" href="./">Back to site</a>
+      <button class="btn btn-ghost btn-sm" type="button" id="lockBtn" hidden>Lock</button>
+    </div>
+  </header>
+
+  <main class="container admin">
+    <section class="card admin-gate" id="gate">
+      <h2>Admin panel</h2>
+      <p class="muted" id="gateMsg">Sign in on the main site with your admin email, then enter your admin key here.</p>
+      <form class="stack" id="keyForm" novalidate>
+        <label class="field"><span>Admin key</span><input id="adminKey" type="password" autocomplete="off" maxlength="200"></label>
+        <p class="inline-msg err" id="keyMsg" role="alert"></p>
+        <button class="btn btn-primary" type="submit">Unlock</button>
+      </form>
+    </section>
+
+    <div id="adminApp" class="stack" hidden>
+      <div class="admin-stats" id="stats"></div>
+
+      <div class="seg" id="tabs" role="tablist">
+        <button class="seg-btn is-on" type="button" data-tab="payments">Payments</button>
+        <button class="seg-btn" type="button" data-tab="coupons">Coupons</button>
+        <button class="seg-btn" type="button" data-tab="users">Users</button>
+      </div>
+
+      <section class="card" data-panel="payments">
+        <div class="card-head">
+          <h4>Payments</h4>
+          <label class="field inline"><span>Show</span>
+            <select id="orderStatus">
+              <option value="submitted">To verify</option>
+              <option value="created">Not paid yet</option>
+              <option value="paid">Paid</option>
+              <option value="rejected">Rejected</option>
+              <option value="all">All</option>
+            </select>
+          </label>
+        </div>
+        <p class="note">Before approving, open your bank or UPI app and check that a payment with this <b>UTR</b> and <b>amount</b> really arrived.</p>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Order</th><th>User</th><th>Plan</th><th>Amount</th><th>UTR / method</th><th>Created</th><th>Status</th><th></th></tr></thead><tbody id="orderRows"></tbody></table></div>
+      </section>
+
+      <section class="card" data-panel="coupons" hidden>
+        <div class="card-head"><h4>Create a coupon</h4><span class="muted small">Codes are stored only as a hash. Copy a new code before you leave this page.</span></div>
+        <form class="coupon-admin" id="couponForm" novalidate>
+          <label class="field"><span>Code (8–32 letters/digits)</span>
+            <div class="input-group"><input id="cCode" type="text" maxlength="40" autocomplete="off" spellcheck="false"><button class="input-addon" type="button" id="genCode">Generate</button></div>
+          </label>
+          <label class="field"><span>Plan</span><select id="cPlan"><option value="trial">Trial</option><option value="standard" selected>Standard</option><option value="premium">Premium</option></select></label>
+          <label class="field"><span>Discount %</span><input id="cPct" type="number" min="1" max="100" value="100"></label>
+          <label class="field"><span>Max uses</span><input id="cMax" type="number" min="1" max="100000" value="50"></label>
+          <label class="field"><span>Expires <em>(optional)</em></span><input id="cExp" type="date"></label>
+          <button class="btn btn-primary" type="submit">Create coupon</button>
+        </form>
+        <p class="inline-msg" id="couponMsg" role="status"></p>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Code</th><th>Plan</th><th>Discount</th><th>Used</th><th>Expires</th><th>Status</th><th></th></tr></thead><tbody id="couponRows"></tbody></table></div>
+      </section>
+
+      <section class="card" data-panel="users" hidden>
+        <div class="card-head"><h4>Find a user</h4></div>
+        <form class="coupon-row" id="userSearch" novalidate><input id="userQ" type="search" placeholder="Part of their email (min 3 characters)"><button class="btn btn-secondary btn-sm" type="submit">Search</button></form>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Email</th><th>Name</th><th>Plan</th><th>Credits</th><th>Sent</th><th>Joined</th><th>Change plan</th></tr></thead><tbody id="userRows"></tbody></table></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script src="admin.js" defer></script>
+</body>
+</html>

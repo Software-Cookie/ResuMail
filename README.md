@@ -1,43 +1,58 @@
 # ResuMail
 
-Upload your resume, get a polished introduction written from it (rule-based, **no AI**), and email it, with your resume attached, to every recruiter on your list. Each person gets their own personal email. Free, private, and no build step.
+Upload your resume, get a polished introduction written from it (rule-based, **no AI**), and email it, with your resume attached, to every recruiter on your list. Each person gets their own personal email, sent from your own Gmail.
+
+## Plans
+
+| Plan | Price | Emails | Min. gap | Templates | Manual entry |
+|---|---|---|---|---|---|
+| Free | ₹0 | 10 / month | 30 s | Recommended + your own | – |
+| Trial | ₹29 once | 100 pack | 10 s | All | ✓ |
+| Standard (recommended) | ₹99 once | 1,000 pack | 5 s | All | ✓ |
+| Premium | ₹299 lifetime | Unlimited | 2 s | All | ✓ |
+
+Quotas, gaps and templates are enforced on the server. Packs never expire. Coupons (any % off, stored only as hashes) are created in the admin panel.
 
 ## Features
 
 - **Resume analysis (offline, no AI):** detects your name, contacts, skills (240+ keywords), experience, education and certifications, then scores you against 29 role profiles and writes your intro.
-- **Manual mode:** skip the analysis and write your own intro.
-- **Recipient lists:** Excel (.xlsx/.xls), CSV, TXT, or paste. Name, company and role columns are detected, duplicates and invalid emails are removed, and the company is guessed from the email domain.
-- **Mail merge:** `{{first_name}}`, `{{company}}`, `{{role}}`, `{{intro}}`, `{{my_name}}` and more, with fallbacks such as `{{company|your organization}}`.
-- **Safe sending:** one email per recipient, a configurable gap, auto-retry, pause/resume/stop, progress and ETA, a downloadable CSV report, and protection against sending twice.
-- **Providers:** Gmail, Yahoo, Zoho, Brevo, or any SMTP server.
+- **Accounts:** email + password (scrypt), 30-day sessions, 15-minute cooling period after 5 failed sign-ins, password reset by email code.
+- **Payments:** UPI to your personal UPI ID (no fees, verified in `/admin.html`), or optional Razorpay for automatic activation.
+- **Recipient lists:** Excel (.xlsx/.xls), CSV, TXT, or paste. Duplicates and invalid emails are removed.
+- **Safe sending:** one email per recipient, plan-based gaps, auto-retry, pause/resume/stop, CSV report.
+- **Security:** parameterised SQL everywhere, CSRF and SSRF protection, strict Content-Security-Policy, rate limits with automatic 15-minute IP blocks after 5 unusual requests.
 
 ## Run locally
 
-Requires Node.js 20 or newer.
+Requires Node.js 20 or newer. No database setup needed: without `DATABASE_URL` the app uses an embedded Postgres in `.data/`.
 
 ```bash
 npm install
-npm start
-# open http://localhost:3000
+npm start          # http://localhost:3000
+npm test           # 15 API tests (auth, quotas, races, coupons, payments, security)
+npm run loadtest   # 300 concurrent visitors against http://localhost:3000
 ```
 
-## Deploy free
+Copy `.env.example` to `.env` to try payments and the admin panel locally.
 
-See the full guide at **public/guide.pdf** (the "Guide" button on the site). Short version for Vercel: push to GitHub, import the repo at vercel.com/new, keep the defaults, and click Deploy.
+## Deploy
+
+Vercel + Neon Postgres (both free tiers). Set `DATABASE_URL`, `ADMIN_EMAILS`, `ADMIN_KEY`, `UPI_ID`, `UPI_NAME` and optionally `SMTP_USER`/`SMTP_PASS`, `SUPPORT_EMAIL`, `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`. The build step (`node scripts/build.js`) writes the SEO tags, sitemap and cache-busted assets to `dist/`.
 
 ## Project layout
 
 ```
-server.js            Express server (local / Render / any Node host)
-api/*.js             Vercel serverless functions (same handlers)
-lib/handlers.js      API: /api/health, /api/config, /api/verify, /api/send
-public/index.html    UI
-public/app.js        UI logic
-public/analyzer.js   Resume analyzer (rule based)
-public/merge.js      Recipient parser + mail merge
-public/vendor/       pdf.js, mammoth, SheetJS (served locally)
+api/index.js         The only Vercel function; every /api/* route is rewritten to it
+lib/router.js        Route table + abuse guard + error handling
+lib/auth.js          Sign up / in / out, sessions, password change & reset
+lib/sending.js       Verify sender, send email, atomic quota + gap enforcement
+lib/billing.js       Coupons, UPI orders, Razorpay
+lib/admin.js         Owner tools (approve payments, coupons, users)
+lib/guard.js         Rate limits, strikes, IP blocks, DB-backed cooldowns
+lib/db.js            Neon (production) / PGlite (local) + self-migrating schema
+lib/plans.js         Plan catalogue and limits
+lib/mail.js          SMTP providers, SSRF guard, pooled transports
+public/              Static site (index, admin, legal pages, app.js, account.js)
+scripts/             build, migrate, loadtest
+test/                node:test suite
 ```
-
-## Optional server-side sender
-
-Copy `.env.example` to `.env` and set `SMTP_USER`, `SMTP_PASS` and `ACCESS_KEY`. The UI then offers "Server sender", which only works for people who know the access key.

@@ -1,19 +1,28 @@
 {
   "name": "resumail",
-  "version": "1.0.0",
-  "description": "ResuMail - analyze your resume, write your intro and email it to a list of recruiters. Free, private, no AI.",
+  "version": "2.0.0",
+  "description": "ResuMail - send a personal email with your resume to every recruiter. Free and paid plans, UPI payments, no AI.",
   "main": "server.js",
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "build": "node scripts/build.js",
+    "db:migrate": "node scripts/migrate.js",
+    "loadtest": "node scripts/loadtest.js",
+    "test": "node --test test/"
   },
   "engines": {
     "node": ">=20"
   },
   "license": "MIT",
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.1",
     "express": "^5.3.0",
     "nodemailer": "^10.6.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "qrcode-generator": "^2.0.4"
   }
 }

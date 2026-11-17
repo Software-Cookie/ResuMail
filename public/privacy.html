@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy · ResuMail</title>
+  <meta name="description" content="How ResuMail handles your account, resume and payment data.">
+  <link rel="canonical" href="%SITE_URL%/privacy.html">
+  <meta name="theme-color" content="#0F766E">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script>try{var t=localStorage.getItem('rm.theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+</head>
+<body>
+  <header class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="./" aria-label="ResuMail home"><img src="logo.svg" alt="" width="34" height="34"><span>Resu<b>Mail</b></span></a>
+      <nav class="nav-links" aria-label="Main"><a href="./#pricing">Pricing</a><a href="./#faq">FAQ</a></nav>
+      <a class="btn btn-primary btn-sm" href="./#app">Open ResuMail</a>
+    </div>
+  </header>
+  <main class="container doc">
+
+    <h1>Privacy Policy</h1>
+    <p class="muted">Last updated: 17 November 2026</p>
+    <p>ResuMail helps job seekers email their resume to recruiters. We collect as little as possible and never sell your data.</p>
+    <h2>What we store</h2>
+    <ul>
+      <li><b>Your account:</b> name, email address and your password, stored only as a salted scrypt hash (we can't read it).</li>
+      <li><b>Your plan:</b> plan, remaining emails and how many emails you have sent. We count emails; we don't keep their content.</li>
+      <li><b>Payments:</b> order number, plan, amount, the UPI transaction ID (UTR) you submit or the payment gateway's reference, and coupon use.</li>
+      <li><b>Fair-use counters:</b> a one-way hash of the sending address with a monthly counter, so the free allowance can't be reset with new accounts.</li>
+      <li><b>Security records:</b> short-lived counters for failed sign-ins and unusual traffic, linked to a hashed email or your IP address and deleted within a few days.</li>
+    </ul>
+    <h2>What we do not store</h2>
+    <ul>
+      <li><b>Your email app password.</b> It is sent to your email provider to deliver each message and is never saved on our servers. If you tick "Remember on this device", it is kept only in your own browser.</li>
+      <li><b>Your resume, your recipient lists and your messages.</b> They stay in your browser. They pass through our server only while an email is being sent and are not kept afterwards.</li>
+    </ul>
+    <h2>Cookies</h2>
+    <p>We use one essential cookie, <code>rm_sess</code>, to keep you signed in. It is HttpOnly and cannot be read by scripts. We use no advertising or tracking cookies. Your drafts and progress are saved in your browser's local storage on your own device.</p>
+    <h2>Who helps us run ResuMail</h2>
+    <p>Hosting (Vercel), database (Neon Postgres), your email provider (for example Gmail) which delivers the emails you send, and, if you pay by card or netbanking, the payment gateway (Razorpay). UPI payments go directly through your UPI app and bank.</p>
+    <h2>Security</h2>
+    <p>All traffic uses HTTPS. Passwords are hashed with scrypt, sign-in has a cooling period after 5 failed attempts, every database query is parameterised, and unusual traffic is blocked automatically.</p>
+    <h2>Your choices</h2>
+    <p>You can change your password at any time from your profile. To delete your account and its data, contact us from your account email. Payment records may be kept for as long as tax law requires.</p>
+    <h2>Children</h2>
+    <p>ResuMail is meant for job seekers aged 18 and over, or younger users with a parent's or guardian's consent.</p>
+    <h2>Changes</h2>
+    <p>If we change this policy, we will update the date above. Significant changes will be shown on the website.</p>
+    <!--support--><p>Questions? Email <a href="mailto:%SUPPORT_EMAIL%">%SUPPORT_EMAIL%</a>.</p><!--/support-->
+  </main>
+  <footer class="foot">
+    <div class="container foot-inner">
+      <a class="brand sm" href="./"><img src="logo.svg" alt="" width="24" height="24"><span>Resu<b>Mail</b></span></a>
+      <nav class="foot-links" aria-label="Legal"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="refund.html">Refunds</a><!--support--><a href="mailto:%SUPPORT_EMAIL%">Contact</a><!--/support--></nav>
+      <span class="muted">© 2026 ResuMail</span>
+    </div>
+  </footer>
+</body>
+</html>

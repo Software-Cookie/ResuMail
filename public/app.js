@@ -24,6 +24,7 @@
   const extOf = (name) => (String(name).match(/\.([a-z0-9]+)$/i) || ['', ''])[1].toLowerCase();
   const A = window.Analyzer;
   const M = window.Merge;
+  const Acc = window.Account;
 
   const scripts = {};
   function loadScript(src) {
@@ -66,6 +67,8 @@
         const e = new Error((data && data.error) || (res.status === 413 ? 'Your resume is too large to send. Use a file under 2.5 MB.' : `Server error (${res.status}).`));
         e.code = (data && data.code) || (res.status === 413 ? 'TOO_LARGE' : res.status === 404 ? 'NO_BACKEND' : `HTTP_${res.status}`);
         e.status = res.status;
+        e.data = data || {};
+        e.retryAfter = (data && data.retryAfter) || Number(res.headers.get('Retry-After')) || 0;
         throw e;
       }
       return data;
@@ -103,8 +106,9 @@
     '{{my_name}}', '{{my_phone}}', '{{my_email}}', '{{my_links}}'].join('\n');
   const MAX_RESUME = 2.5 * 1024 * 1024;
   const MAX_SKILLS = 10;
-  const FATAL = new Set(['AUTH', 'LIMIT', 'BAD_SENDER', 'BAD_KEY', 'NO_SERVER_SENDER', 'BAD_HOST', 'TOO_LARGE', 'BAD_ATTACHMENT', 'VALIDATION', 'NO_BACKEND']);
-  const RETRYABLE = new Set(['NETWORK', 'TIMEOUT', 'CONNECTION', 'THROTTLED', 'RATE_LIMIT', 'SEND_FAILED', 'SERVER']);
+  const FATAL = new Set(['AUTH', 'LIMIT', 'BAD_SENDER', 'BAD_KEY', 'NO_SERVER_SENDER', 'BAD_HOST', 'TOO_LARGE', 'BAD_ATTACHMENT', 'VALIDATION', 'NO_BACKEND',
+    'QUOTA', 'AUTH_REQUIRED', 'BLOCKED', 'TEST_LIMIT', 'PLAN_REQUIRED', 'LOCKED']);
+  const RETRYABLE = new Set(['NETWORK', 'TIMEOUT', 'CONNECTION', 'THROTTLED', 'RATE_LIMIT', 'SEND_FAILED', 'SERVER', 'UNAVAILABLE']);
   const ME_DEFAULTS = { name: '', email: '', phone: '', linkedin: '', github: '', location: '', notice: '', role: '', experience: '', currentTitle: '', currentCompany: '', degree: '', college: '', certifications: '', achievement: '', skills: [], intro: '' };
 
   const savedCompose = LS.get('compose', {});
@@ -122,7 +126,7 @@
     introLength: LS.get('introLength', 'detailed'),
     me: Object.assign({}, ME_DEFAULTS, LS.get('me', {})),
     recipients: (LS.get('recipients', []) || []).map((r) => (r.status === 'sending' ? { ...r, status: 'pending' } : r)),
-    compose: Object.assign({ subject: DEFAULT_SUBJECT, body: DEFAULT_BODY, attach: true, delay: '5' }, savedCompose),
+    compose: Object.assign({ subject: DEFAULT_SUBJECT, body: DEFAULT_BODY, attach: true, delay: '30', tpl: 'default' }, savedCompose),
     previewIndex: 0,
     run: { active: false, paused: false, stop: false, durations: [] },
     lastField: null,
@@ -300,6 +304,10 @@
     const problem = validateSender();
     const msg = $('#verifyMsg');
     if (problem) { msg.textContent = problem; msg.className = 'inline-msg err'; throw Object.assign(new Error(problem), { code: 'BAD_SENDER' }); }
+    if (!(await Acc.ensureSignedIn('Sign in or create a free account to connect your email.'))) {
+      msg.textContent = 'Sign in to connect your email.'; msg.className = 'inline-msg err';
+      throw Object.assign(new Error('Sign in to continue.'), { code: 'AUTH_REQUIRED' });
+    }
     const btn = $('#verifyBtn');
     setLoading(btn, true);
     msg.textContent = ''; msg.className = 'inline-msg';
@@ -314,6 +322,7 @@
       return true;
     } catch (e) {
       state.sender.verifiedKey = ''; persist.sender();
+      if (e.code === 'AUTH_REQUIRED') Acc.setUser(null);
       msg.textContent = e.message; msg.className = 'inline-msg err';
       updateSteps();
       throw e;
@@ -649,6 +658,7 @@
 
   $$('#modeSeg .seg-btn').forEach((b) => b.addEventListener('click', () => {
     if (state.mode === b.dataset.mode) return;
+    if (b.dataset.mode === 'manual' && !Acc.can('manual')) { Acc.showLocked('manual'); return; }
     state.mode = b.dataset.mode; LS.set('mode', state.mode);
     renderProfile(); updateSteps(); renderPreview();
     if (state.mode === 'auto') ensureAnalysis();
@@ -774,11 +784,80 @@
   });
   $('#attachResume').addEventListener('change', (e) => { state.compose.attach = e.target.checked; persist.compose(); renderPreview(); renderChecklist(); });
   $('#delay').addEventListener('change', (e) => { state.compose.delay = e.target.value; persist.compose(); });
+  $('#gapUpgrade').addEventListener('click', () => Acc.showLocked('gap'));
   $('#resetTemplate').addEventListener('click', () => {
     if (!confirm('Replace the subject and message with the recommended template?')) return;
-    state.compose.subject = DEFAULT_SUBJECT; state.compose.body = DEFAULT_BODY;
+    state.compose.subject = DEFAULT_SUBJECT; state.compose.body = DEFAULT_BODY; state.compose.tpl = 'default';
     persist.compose(); renderCompose();
   });
+
+  /* --- plan-aware controls: gaps, templates, quota --- */
+  const gapPlan = (s) => (s >= 10 ? 'Trial' : s >= 5 ? 'Standard' : 'Premium');
+  function renderDelayOptions() {
+    const min = Acc.minGap();
+    const choices = Acc.gapChoices();
+    const sel = $('#delay');
+    sel.innerHTML = choices.map((s) => `<option value="${s}"${s < min ? ' disabled' : ''}>${s} seconds${s < min ? ` · ${gapPlan(s)}+` : ''}</option>`).join('');
+    // Show the closest allowed gap without overwriting the saved preference (the plan may still be loading).
+    const cur = Number(state.compose.delay) || 0;
+    sel.value = String(choices.find((s) => s >= Math.max(min, cur)) || min);
+    $('#gapUpgrade').hidden = Acc.usage().plan === 'premium';
+  }
+
+  let tplCache = null;
+  function renderTemplates() {
+    const unlocked = Acc.can('templates');
+    const list = [{ id: 'default', name: 'Recommended', desc: 'Our all-round template, included in every plan.' }].concat(Acc.config.templates || []);
+    $('#tplList').innerHTML = list.map((t) => {
+      const locked = t.id !== 'default' && !unlocked;
+      return `<button type="button" class="tpl${state.compose.tpl === t.id ? ' is-on' : ''}${locked ? ' locked' : ''}" data-tpl="${esc(t.id)}" title="${esc(t.desc)}">${locked ? Acc.LOCK_SVG : ''}${esc(t.name)}</button>`;
+    }).join('');
+    $('#tplHint').textContent = unlocked ? 'Pick one, then edit freely' : 'Free plan: Recommended or your own text';
+  }
+  async function applyTemplate(id) {
+    let t;
+    if (id === 'default') t = { subject: DEFAULT_SUBJECT, body: DEFAULT_BODY };
+    else {
+      if (!Acc.can('templates')) { Acc.showLocked('templates'); return; }
+      if (!tplCache) {
+        try { tplCache = (await Acc.api('api/templates')).templates; } catch (e) {
+          if (e.code === 'PLAN_REQUIRED') { if (e.data.user) Acc.setUser(e.data.user); Acc.showLocked('templates'); } else toast(e.message, 'err');
+          return;
+        }
+      }
+      t = tplCache.find((x) => x.id === id);
+      if (!t) return;
+    }
+    const edited = state.compose.body.trim() && state.compose.body !== t.body;
+    if (edited && state.compose.tpl !== id && !confirm('Replace your current subject and message with this template?')) return;
+    Object.assign(state.compose, { subject: t.subject, body: t.body, tpl: id });
+    persist.compose(); renderCompose();
+    toast('Template applied. Edit anything you like.', 'ok');
+  }
+  $('#tplList').addEventListener('click', (e) => { const b = e.target.closest('.tpl'); if (b) applyTemplate(b.dataset.tpl); });
+
+  function renderQuota() {
+    const el = $('#quotaNote');
+    if (!el) return;
+    if (!Acc.signedIn()) { el.innerHTML = '<b>Sign in to send.</b> Free accounts get 10 emails every month. <button type="button" class="link-btn" data-auth="signup">Create a free account</button>'; return; }
+    const u = Acc.usage();
+    const tier = Acc.tierHtml(u.plan);
+    if (u.unlimited) el.innerHTML = `${tier} Unlimited emails · from ${u.minGap}s gap`;
+    else if (u.plan === 'free') el.innerHTML = `${tier} <b>${u.remaining}</b> of ${u.limit} free emails left this month · ${u.minGap}s gap <button type="button" class="link-btn" data-upgrade>Upgrade</button>`;
+    else el.innerHTML = `${tier} <b>${Number(u.remaining).toLocaleString('en-IN')}</b> emails left in your pack · ${u.minGap}s gap <button type="button" class="link-btn" data-upgrade>Buy more</button>`;
+  }
+  function applyPlan() {
+    renderDelayOptions(); renderTemplates(); renderQuota();
+    const manualLocked = !Acc.can('manual');
+    $$('[data-lock="manual"]').forEach((x) => { x.hidden = !manualLocked; });
+    if (Acc.known && manualLocked && state.mode === 'manual') {
+      state.mode = 'auto'; LS.set('mode', state.mode);
+      renderProfile(); updateSteps(); renderPreview();
+      toast('Manual entry is part of the paid plans, so we switched you to resume analysis. You can still edit everything.');
+      ensureAnalysis();
+    }
+  }
+  Acc.onChange(applyPlan);
   $('#prevRec').addEventListener('click', () => movePreview(-1));
   $('#nextRec').addEventListener('click', () => movePreview(1));
   function movePreview(d) {
@@ -802,7 +881,7 @@
     $('#attachResume').checked = !!state.compose.attach;
     $('#attachResume').disabled = !state.resume;
     $('#attachName').textContent = state.resume ? `(${state.resume.name})` : '(no resume uploaded)';
-    $('#delay').value = state.compose.delay;
+    renderDelayOptions(); renderTemplates(); renderQuota();
     renderPreview(); renderChecklist(); renderRunUI();
   }
 
@@ -869,15 +948,15 @@
     if (state.run.active) return;
     if (!state.compose.subject.trim() || !state.compose.body.trim()) return toast('Write a subject and message first.', 'err');
     const btn = $('#testBtn');
+    if (!(await Acc.ensureSignedIn('Sign in to send a test email.'))) return;
     setLoading(btn, true);
     try {
       if (!(await ensureSender())) return;
-      const to = senderAddress() || state.me.email;
-      if (!M.isEmail(to)) return toast('Add your email in step 2 so we know where to send the test.', 'err');
       const sample = state.recipients[state.previewIndex] || SAMPLE;
-      await api('api/send', { ...payloadFor(sample, '[Test] '), to }, 60000);
-      toast(`Test email sent to ${to}. Check your inbox (and spam folder).`, 'ok', 6000);
+      const res = await api('api/send', { ...payloadFor(sample), test: true }, 60000);
+      toast(`Test email sent to ${res.to}. Check your inbox (and spam folder).`, 'ok', 6000);
     } catch (e) {
+      if (e.code === 'AUTH_REQUIRED') Acc.setUser(null);
       toast(e.message, 'err', 7000);
     } finally {
       setLoading(btn, false);
@@ -886,7 +965,12 @@
 
   $('#startBtn').addEventListener('click', async () => {
     if (state.run.active || !precheck()) return;
-    const n = pendingCount();
+    if (!(await Acc.ensureSignedIn('Sign in to start sending.'))) return;
+    const u = Acc.usage();
+    if (!u.unlimited && u.remaining <= 0) { Acc.showLocked('quota'); return; }
+    const pending = pendingCount();
+    const n = u.unlimited ? pending : Math.min(pending, u.remaining);
+    if (n < pending && !confirm(`Your plan has ${u.remaining} email${u.remaining === 1 ? '' : 's'} left, so ${n} of your ${pending} recipients will get your email now. The rest stay pending until you upgrade.\n\nContinue?`)) return;
     const btn = $('#startBtn');
     setLoading(btn, true);
     const ok = await ensureSender();
@@ -894,7 +978,7 @@
     if (!ok) return;
     const from = state.sender.mode === 'server' ? 'the server account' : senderAddress();
     if (!confirm(`Send ${n} email${n === 1 ? '' : 's'} from ${from}?\n\nEach recipient gets a separate, personal email${state.compose.attach && state.resume ? ' with your resume attached' : ''}.`)) return;
-    runCampaign();
+    runCampaign(n);
   });
   $('#pauseBtn').addEventListener('click', () => {
     state.run.paused = !state.run.paused;
@@ -938,26 +1022,33 @@
     }
   }
   async function sendWithRetry(r) {
+    let gapWaits = 0;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        await api('api/send', payloadFor(r), 60000);
+        const res = await api('api/send', payloadFor(r), 60000);
+        if (res.usage) Acc.setUsage(res.usage);
         return { ok: true };
       } catch (e) {
+        if (e.data && e.data.usage) Acc.setUsage(e.data.usage);
+        if (e.code === 'GAP' && gapWaits++ < 5 && !state.run.stop) { // the server asks us to respect the plan's gap
+          await interruptibleSleep((e.retryAfter || 5) * 1000 + 400);
+          attempt--; continue;
+        }
         const retryable = RETRYABLE.has(e.code) || (e.status >= 500 && !FATAL.has(e.code));
         if (!retryable || attempt === 2 || state.run.stop) return { ok: false, code: e.code, error: e.message };
-        await interruptibleSleep(e.code === 'RATE_LIMIT' || e.code === 'THROTTLED' ? 20000 : attempt ? 8000 : 3000);
+        await interruptibleSleep(e.retryAfter ? e.retryAfter * 1000 : e.code === 'THROTTLED' ? 20000 : attempt ? 8000 : 3000);
         if (state.run.stop) return { ok: false, code: e.code, error: e.message };
       }
     }
     return { ok: false, code: 'UNKNOWN', error: 'Unknown error' };
   }
 
-  async function runCampaign() {
+  async function runCampaign(limit) {
     const run = state.run;
     Object.assign(run, { active: true, paused: false, stop: false, durations: [] });
     window.addEventListener('beforeunload', beforeUnload);
     renderRunUI(); updateSteps();
-    const queue = state.recipients.filter((r) => r.status === 'pending');
+    const queue = state.recipients.filter((r) => r.status === 'pending').slice(0, limit || Infinity);
     let sent = 0; let failed = 0; let streak = 0; let fatal = null;
 
     for (let i = 0; i < queue.length; i++) {
@@ -975,7 +1066,7 @@
       if (res.ok) {
         r.status = 'sent'; r.error = ''; r.sentAt = new Date().toISOString(); sent++; streak = 0;
       } else {
-        r.status = 'failed'; r.error = res.error; failed++;
+        if (res.code === 'QUOTA' || res.code === 'AUTH_REQUIRED' || res.code === 'BLOCKED') { r.status = 'pending'; r.error = ''; } else { r.status = 'failed'; r.error = res.error; failed++; }
         if (FATAL.has(res.code)) { fatal = res; run.stop = true; }
         else if (res.code === 'RECIPIENT') streak = 0;
         else if (++streak >= 3) { fatal = { error: `3 emails in a row failed (${res.error}). Sending stopped so you can check what's wrong.` }; run.stop = true; }
@@ -989,10 +1080,14 @@
     window.removeEventListener('beforeunload', beforeUnload);
     renderRunUI(); renderChecklist(); updateSteps();
     if (fatal) toast(fatal.error, 'err', 9000);
+    if (fatal && fatal.code === 'QUOTA') Acc.showLocked('quota');
+    if (fatal && fatal.code === 'AUTH_REQUIRED') { Acc.setUser(null); Acc.openAuth('login', 'Your session ended. Sign in again to continue sending.'); }
     const left = pendingCount();
     toast(`Done: ${sent} sent${failed ? `, ${failed} failed` : ''}${left ? `, ${left} still pending` : ''}.`, failed && !sent ? 'err' : 'ok', 7000);
   }
-  const delayMs = () => Number(state.compose.delay || 5) * 1000 * (0.85 + Math.random() * 0.3);
+  // Never shorter than the chosen gap (the server enforces the plan's minimum), plus a little jitter.
+  const gapSeconds = () => Number($('#delay').value) || Math.max(Number(state.compose.delay) || 30, Acc.minGap());
+  const delayMs = () => Math.max(gapSeconds(), Acc.minGap()) * 1000 * (1 + Math.random() * 0.2);
 
   function updateProgress() {
     const c = counts();
@@ -1002,7 +1097,7 @@
     $('#progressText').innerHTML = `<b>${c.sent}</b> sent · <b>${c.failed}</b> failed · <b>${c.pending + c.sending}</b> remaining`;
     const d = state.run.durations;
     if (state.run.active && d.length) {
-      const avg = d.reduce((a, b) => a + b, 0) / d.length + Number(state.compose.delay) * 1000;
+      const avg = d.reduce((a, b) => a + b, 0) / d.length + gapSeconds() * 1100;
       $('#etaText').textContent = `About ${fmtDuration(avg * (c.pending + c.sending))} left`;
     } else $('#etaText').textContent = '';
   }
@@ -1037,14 +1132,15 @@
   async function boot() {
     $('#year').textContent = new Date().getFullYear();
     fillSenderForm(); fillMe(); renderResume(); renderProfile();
-    renderList(); renderCompose(); updateSteps(); revealOnScroll();
+    renderList(); renderCompose(); updateSteps(); revealOnScroll(); applyPlan();
     try {
-      const cfg = await api('api/config', null, 10000);
+      const cfg = await Acc.ready;
       state.server = cfg;
       if (cfg.serverSender) { $('#senderModeSeg').hidden = false; $('#serverFrom').textContent = cfg.serverFrom || ''; }
-      applySenderMode(); updateSteps();
+      if (cfg.degraded) toast('Accounts are temporarily unavailable. Please try again in a minute.', 'err', 8000);
+      applySenderMode(); updateSteps(); applyPlan();
     } catch (e) {
-      toast('The ResuMail server is not reachable, so emails can\'t be sent. Start it with "npm start".', 'err', 9000);
+      toast('The ResuMail server is not reachable right now. Please check your connection and reload.', 'err', 9000);
     }
     if (isVerified()) {
       goto(state.me.intro.trim() ? (state.recipients.length ? 4 : 3) : 2, { scroll: false });
